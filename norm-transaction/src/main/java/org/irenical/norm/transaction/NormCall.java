@@ -1,8 +1,6 @@
 package org.irenical.norm.transaction;
 
 import java.sql.CallableStatement;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class NormCall<INPUT, OUTPUT> extends NormOperation<INPUT, OUTPUT> {
