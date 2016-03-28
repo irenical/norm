@@ -9,6 +9,8 @@ import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
@@ -57,18 +59,10 @@ public final class JDBChops {
   public static void setInput(PreparedStatement preparedStatement, int idx, Object value) throws SQLException {
     if (value instanceof Timestamp) {
       preparedStatement.setTimestamp(idx, (Timestamp) value);
-    } else if (value instanceof Instant) {
-      Instant i = (Instant) value;
-      Timestamp t = new Timestamp(i.toEpochMilli());
-      preparedStatement.setTimestamp(idx, t);
     } else if (value instanceof ZonedDateTime) {
       ZonedDateTime zdt = (ZonedDateTime) value;
       Calendar cal = GregorianCalendar.from(zdt);
-      Timestamp t = new Timestamp(zdt.toInstant().toEpochMilli());
-      preparedStatement.setTimestamp(idx, t, cal);
-    } else if (value instanceof Calendar) {
-      Calendar cal = (Calendar) value;
-      Timestamp t = new Timestamp(cal.getTimeInMillis());
+      Timestamp t = Timestamp.from(zdt.toInstant());
       preparedStatement.setTimestamp(idx, t, cal);
     } else if (value instanceof Time) {
       preparedStatement.setTime(idx, (Time) value);
