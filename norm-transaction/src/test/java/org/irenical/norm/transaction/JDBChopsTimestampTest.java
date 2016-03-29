@@ -7,12 +7,14 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.function.Function;
 
 public class JDBChopsTimestampTest {
 
   private static final String SQL_INSERT_ARTICLE = "INSERT INTO article (title, published_stamp) VALUES(?,?)";
   private static final String SQL_SELECT_ARTICLE_BY_ID = "SELECT published_stamp FROM article WHERE article_id = ?";
-  private static final long SUMMER_DATE = 1459189283000l;
+  private static final long TEST_DATE = 1459189283000l;
+  private static final ZoneId TEST_ZONE_ID = ZoneId.of("America/Los_Angeles");
 
   private static Connection getConnection() throws SQLException {
     return DriverManager.getConnection("jdbc:derby:memory:norm_testing_timestamp;create=true");
@@ -35,84 +37,85 @@ public class JDBChopsTimestampTest {
   }
 
 
+  private int insertArticle(Connection connection, String title, Object publishedDate) throws SQLException {
+    int articleId;
+    try (PreparedStatement ins = connection.prepareStatement(SQL_INSERT_ARTICLE, Statement.RETURN_GENERATED_KEYS)) {
+      JDBChops.prepareInput(ins, Arrays.asList(title, publishedDate));
+      ins.executeUpdate();
+      try (ResultSet generatedKeys = ins.getGeneratedKeys()) {
+        if (generatedKeys.next()) {
+          articleId = generatedKeys.getInt(1);
+        } else {
+          throw new SQLException("Failed to insert article");
+        }
+      }
+    }
+    return articleId;
+  }
+
+  private void selectArticle(Connection connection, int articleId, Function<ResultSet,Boolean> callback) throws SQLException {
+    try (PreparedStatement sel = connection.prepareStatement(SQL_SELECT_ARTICLE_BY_ID)) {
+      JDBChops.prepareInput(sel, Collections.singletonList(articleId));
+      sel.execute();
+      try (ResultSet resultSet = sel.getResultSet()) {
+        boolean result = callback.apply(resultSet);
+        if (!result) {
+          throw new SQLException("Failed to get values from resultSet");
+        }
+      }
+    }
+  }
+
+
   @Test
   public void testSetInputTimestamp() throws Exception {
     try (Connection conn = getConnection()) {
-      int articleId;
-      Timestamp testTimestamp = new Timestamp(SUMMER_DATE);
+      Timestamp testTimestamp = new Timestamp(TEST_DATE);
+      int articleId = insertArticle(conn, "Foo", testTimestamp);
 
-      try (PreparedStatement ins = conn.prepareStatement(SQL_INSERT_ARTICLE, Statement.RETURN_GENERATED_KEYS)) {
-        JDBChops.prepareInput(ins, Arrays.asList("Foo", testTimestamp));
-        ins.executeUpdate();
-        try (ResultSet generatedKeys = ins.getGeneratedKeys()) {
-          if (generatedKeys.next()) {
-            articleId = generatedKeys.getInt(1);
-          } else {
-            Assert.fail();
-            return;
-          }
-        }
-      }
-
-      try (PreparedStatement sel = conn.prepareStatement(SQL_SELECT_ARTICLE_BY_ID)) {
-        JDBChops.prepareInput(sel, Collections.singletonList(articleId));
-        sel.execute();
-        try (ResultSet resultSet = sel.getResultSet()) {
+      selectArticle(conn, articleId, (resultSet) -> {
+        boolean result = false;
+        try {
           if (resultSet.next()) {
-            Timestamp result = resultSet.getTimestamp(1);
-            Assert.assertEquals(testTimestamp, result);
-          } else {
-            Assert.fail();
+            //Timestamp was stored and read using the jvm default timezone
+            Timestamp storedTimestamp = resultSet.getTimestamp(1);
+            Assert.assertEquals(testTimestamp, storedTimestamp);
+            result = true;
           }
+        } catch (SQLException e) {
+          // unable to validate timestamp
         }
-      }
+        return result;
+      });
     }
   }
 
   @Test
   public void testSetInputZonedDateTime() throws Exception {
     try (Connection conn = getConnection()) {
-      int articleId;
+      ZonedDateTime testZdt = ZonedDateTime.ofInstant(Instant.ofEpochMilli(TEST_DATE), TEST_ZONE_ID);
+      int articleId = insertArticle(conn, "Foo", testZdt);
 
-      ZonedDateTime zdt = ZonedDateTime.ofInstant(Instant.ofEpochMilli(SUMMER_DATE), ZoneId.of("Europe/Lisbon"));
-
-      try (PreparedStatement ins = conn.prepareStatement(SQL_INSERT_ARTICLE, Statement.RETURN_GENERATED_KEYS)) {
-        JDBChops.prepareInput(ins, Arrays.asList("Foo", zdt));
-        ins.executeUpdate();
-        try (ResultSet generatedKeys = ins.getGeneratedKeys()) {
-          if (generatedKeys.next()) {
-            articleId = generatedKeys.getInt(1);
-          } else {
-            Assert.fail();
-            return;
-          }
-        }
-      }
-
-      try (PreparedStatement sel = conn.prepareStatement(SQL_SELECT_ARTICLE_BY_ID)) {
-        JDBChops.prepareInput(sel, Collections.singletonList(articleId));
-        sel.execute();
-        try (ResultSet resultSet = sel.getResultSet()) {
+      selectArticle(conn, articleId, (resultSet) -> {
+        boolean result = false;
+        try {
           if (resultSet.next()) {
-            Calendar cal = Calendar.getInstance();
-            cal.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+            //Timestamp was stored and read using the timezone provided by to the ZonedDateTime
+            Timestamp storedTimestamp = resultSet.getTimestamp(1, GregorianCalendar.from(testZdt));
 
-            Timestamp result = resultSet.getTimestamp(1, GregorianCalendar.from(zdt));
+            Timestamp originalTimestamp = Timestamp.from(testZdt.toInstant());
+            Assert.assertEquals(originalTimestamp, storedTimestamp);
 
-            ZonedDateTime resultZdt = ZonedDateTime.ofInstant(
-                    Instant.ofEpochMilli(result.getTime()),
-                    ZoneId.of("Europe/Lisbon"));
-
-
-            Assert.assertTrue(zdt.equals(resultZdt));
-
-          } else {
-            Assert.fail();
+            ZonedDateTime storedZdt = ZonedDateTime.ofInstant(storedTimestamp.toInstant(), testZdt.getZone());
+            Assert.assertEquals(testZdt, storedZdt);
+            result = true;
           }
+        } catch (SQLException e) {
+          //unable to validate timestamp
         }
-      }
+        return result;
+      });
     }
-
   }
 
   @AfterClass
