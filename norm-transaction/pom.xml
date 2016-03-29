@@ -11,7 +11,7 @@
 
   <groupId>org.irenical.norm</groupId>
   <artifactId>norm-transaction</artifactId>
-  <version>0.5.3</version>
+  <version>0.5.4-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>NORM Transaction Builder</name>
