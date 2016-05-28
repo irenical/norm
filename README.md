@@ -1,4 +1,6 @@
 # NORM
+This project is discontinued. For further developments, see [drowsy](https://github.com/irenical/drowsy) instead.
+
 <b>Not an O.R.M.</b>  
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.irenical.norm/norm/badge.svg?style=flat)](http://mvnrepository.com/artifact/org.irenical.norm/norm)
 
